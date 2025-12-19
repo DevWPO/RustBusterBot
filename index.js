@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { rateLimitedFetch, recordRateLimitHeaders }  from'./battlemetrics.js';
 import { scorePlayer } from './modules/scoring.js';
 import { calculateDaysSinceMostRecentBan, summarizeBattleMetricsBans } from './modules/bmUtils.js';
+import { getActivity } from './modules/GetActivity.js';
 
 import dotenv from 'dotenv';
 dotenv.config();
@@ -51,7 +52,7 @@ async function getPlayersStream(serverId, onlineOnly, onPlayer) {
         const data = await bmFetch(url);
 
         for (const player of data.data) {
-            await onPlayer(player); // 🔥 ONE BY ONE
+            await onPlayer(player);
         }
 
         url = data.links?.next || null;
@@ -64,6 +65,30 @@ async function fetchPlayerBundle(playerId) {
     );
 
     return { bans: bans.data || [] };
+}
+
+async function fetchLeaderboard(serverId,playerId) {
+    const response = await bmFetch(
+        `https://api.battlemetrics.com/players/${playerId}/servers/${serverId}`
+    );
+    const entry = response.data;
+    console.log(entry)
+    if (!entry) {
+        return { kd: null, kills: null, deaths: null, reason: 'Not tracked' };
+    }
+    const meta = entry.attributes?.metadata;
+    if (!meta || meta.kills == null || meta.deaths == null) {
+        return { kd: null, kills: null, deaths: null, reason: 'No K/D metadata' };
+    }
+
+    const kills = meta.kills;
+    const deaths = meta.deaths;
+
+    const kd = deaths > 0
+        ? (kills / deaths).toFixed(2)
+        : kills.toFixed(2);
+
+    return { kills, deaths, kd };
 }
 
 client.once('clientReady', () => {
@@ -84,9 +109,9 @@ client.on('messageCreate', async (message) => {
     try {
         await getPlayersStream(serverId, true, async (player) => {
             count++;
-
+            
             const bundle = await fetchPlayerBundle(player.id);
-
+            const stats = await fetchLeaderboard(serverId, player.id);
             const sbDaysAgo = calculateDaysSinceMostRecentBan(bundle.bans);
             const bmSummary = summarizeBattleMetricsBans(bundle.bans);
 
@@ -98,7 +123,10 @@ client.on('messageCreate', async (message) => {
                 banStatus: {
                     sb: bundle.bans.length,
                     sbDaysAgo
-                }
+                },
+                kills: stats.kills,
+                deaths: stats.deaths,
+                kd: stats.kd
             });
 
             const emoji =
@@ -108,8 +136,8 @@ client.on('messageCreate', async (message) => {
                 '🟢';
 
             await message.channel.send(
-                `${emoji} **${player.attributes.name}**\n` +
-                `Score: **${scored.score}** (${scored.severity})\n` +
+                `${emoji} **${player.attributes.name}** (ID: \`${player.id}\`)\n` +
+                `Score: **${scored.score}** (${scored.severity})\n` + `K/D: **${stats.kd}** | Kills: **${stats.kills}** | Deaths: **${stats.deaths}**\n` +
                 `Bans: ${bundle.bans.length}` +
                 (sbDaysAgo !== null ? ` | Last ban: ${sbDaysAgo}d ago` : '')
             );
