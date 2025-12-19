@@ -80,7 +80,7 @@ async function getActivity(BMToken, Arkan= false, Guardian= false, BMID) {
     for (const activity of activityLogs) {
         const type = activity.attributes.messageType;
         const eventData = activity.attributes.data;
-        const isRecent = isWithin24hours(activity.attributes.timestamp);
+        const isRecent = isWithin24hours(new Date(activity.attributes.timestamp));
 
         // 1. Handle PVP Kills/Deaths using ID matching
         if (type === "rustLog:playerDeath:PVP") {
@@ -157,35 +157,16 @@ client.on('messageCreate', async (message) => {
         await getPlayersStream(serverId, true, async (player) => {
             const bundle = await fetchPlayerBundle(player.id);
             await sleep(100); // To avoid rate limits
-            const activity = await getActivity(token, false, false, player.id);
+            const activityStats = await getActivity(token, false, false, player.id);
             await sleep(100);
-            const detiledInfo = await getPlayerInfo(player.id);
-            if (!detiledInfo || !detiledInfo.online) return;
+            const detailedInfo = await getPlayerInfo(player.id);
+            if (!detailedInfo || !detailedInfo.online) return;
             count++;
             const sbDaysAgo = calculateDaysSinceMostRecentBan(bundle.bans);
-            const recentActivity = activity.filter(act => isWithin24hours(act.attributes.timestamp));
-            const cKills = recentActivity.filter(act =>
-                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
-               act.attributes.message.includes(`killed by ${player.attributes.name}`)).length;
-            const cDeaths = recentActivity.filter(act =>
-                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
-               act.attributes.message.startsWith(`${player.attributes.name} was killed`)).length;
-            const cKd = cDeaths === 0 ? cKills : (cKills / cDeaths).toFixed(2);
-            const kills = activity.filter(act =>
-                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
-               act.attributes.message.includes(`killed by ${player.attributes.name}`)).length;
-            const deaths = activity.filter(act =>
-                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
-               act.attributes.message.startsWith(`${player.attributes.name} was killed`)).length;
-            const kd = deaths === 0 ? kills : (kills / deaths).toFixed(2);
-            const playerStats = { kills, deaths, kd, cKills, cDeaths, cKd };
-            const statusText = detiledInfo.online ? 'Online' : 'Offline';
             const scored = scorePlayer({
                 nameMatch: 0,
-                banStatus: {
-                    sb: bundle.bans.length,
-                    sbDaysAgo},
-                activityStats: activity});
+                banStatus: { sb: bundle.bans.length, sbDaysAgo },
+                activityStats: activityStats });
 
             const emoji =
                 scored.severity === 'Critical' ? '🔴' :
@@ -194,12 +175,11 @@ client.on('messageCreate', async (message) => {
                 '🟢';
             
             await message.channel.send(
-                `${emoji} **${player.attributes.name}** (ID: \`${player.id}\`)\n` +
-                `Score: **${scored.score}** (${scored.severity})\n` +
-                `K/D: **${playerStats.kd}** | Kills: **${playerStats.kills}** | Deaths:${playerStats.deaths}\n` +
-                `K/D in past 24Hours: **${playerStats.cKd}** | Kills in past 24Hours: **${playerStats.cKills}** | Deaths in past 24Hours:${playerStats.cDeaths}\n` +
-                `Bans: ${bundle.bans.length}` + (sbDaysAgo !== null ? ` | Last: ${sbDaysAgo}d ago` : '') + `\n` + statusText
-            );
+                `${detailedInfo.online ? '🔵' : '⚪'} **${player.attributes.name}** (ID: \`${player.id}\`)\n` +
+                `Score: **${scored.score}** (${scored.severity}) | BM: **${detailedInfo.totalHours}h**\n` +
+                `**24h (C):** K/D: **${activityStats.kd24h}** | K: **${activityStats.kills24h}** | D: **${activityStats.deaths24h}** | Reports: **${activityStats.reports24h}**\n` +
+                `**Total (T):** K/D: **${activityStats.kd}** | K: **${activityStats.kills}** | D: **${activityStats.deaths}** | Reports: **${activityStats.reports}**\n` +
+                `Bans: **${bundle.bans.length}**` + (sbDaysAgo !== null ? ` | Last: ${sbDaysAgo}d ago` : ''));
             await sleep(500);
         });
 
