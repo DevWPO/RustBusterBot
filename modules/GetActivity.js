@@ -1,5 +1,5 @@
 import { isWithin24hours } from "./other/isWithin24hours.js";
-export async function getActivity(BMToken, Arkan, Guardian, BMID) {
+export async function getActivity(BMToken, Arkan= false, Guardian= false, BMID) {
     const responses = [];
     await FetchActivity(
         `https://api.battlemetrics.com/activity?tagTypeMode=and&filter[types][blacklist]=event:query&filter[players]=${BMID}&include=organization,user&page[size]=1000&access_token=${BMToken}`

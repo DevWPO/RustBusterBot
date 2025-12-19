@@ -2,8 +2,7 @@ import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { rateLimitedFetch, recordRateLimitHeaders }  from'./battlemetrics.js';
 import { scorePlayer } from './modules/scoring.js';
 import { calculateDaysSinceMostRecentBan, summarizeBattleMetricsBans } from './modules/bmUtils.js';
-import { getActivity } from './modules/GetActivity.js';
-
+import { isWithin24hours } from "./modules/other/isWithin24hours.js";
 import dotenv from 'dotenv';
 dotenv.config();
 const commands = [
@@ -50,7 +49,6 @@ async function getPlayersStream(serverId, onlineOnly, onPlayer) {
 
     while (url) {
         const data = await bmFetch(url);
-
         for (const player of data.data) {
             await onPlayer(player);
         }
@@ -67,30 +65,42 @@ async function fetchPlayerBundle(playerId) {
     return { bans: bans.data || [] };
 }
 
-async function fetchLeaderboard(serverId,playerId) {
-    const response = await bmFetch(
-        `https://api.battlemetrics.com/players/${playerId}/servers/${serverId}`
-    );
-    const entry = response.data;
-    console.log(entry)
-    if (!entry) {
-        return { kd: null, kills: null, deaths: null, reason: 'Not tracked' };
-    }
-    const meta = entry.attributes?.metadata;
-    if (!meta || meta.kills == null || meta.deaths == null) {
-        return { kd: null, kills: null, deaths: null, reason: 'No K/D metadata' };
-    }
-
-    const kills = meta.kills;
-    const deaths = meta.deaths;
-
-    const kd = deaths > 0
-        ? (kills / deaths).toFixed(2)
-        : kills.toFixed(2);
-
-    return { kills, deaths, kd };
+async function getActivity(BMToken, Arkan= false, Guardian= false, playerID) {
+    const url = `https://api.battlemetrics.com/activity?tagTypeMode=and&filter[types][blacklist]=event:query&filter[players]=${playerID}&include=organization,user&page[size]=100`;
+    const responses = await bmFetch(url);
+    return responses.data || [];
 }
 
+async function getPlayerInfo(playerId) {
+    const url = `https://api.battlemetrics.com/players/${playerId}?include=server&fields[server]=name,ip,port`;
+    const data = await bmFetch(url);
+    if (!data) return null;
+    const currentSession = {
+        server: "Offline",
+        online: false,
+    }
+    let totalBMHours = 0;
+
+    // Look through the servers this player has played on
+    if (data.included) {
+        for (const server of data.included.filter(i => i.type === "server")) {
+            // Sum up total playtime across all servers
+            totalBMHours += (server.meta?.timePlayed || 0) / 3600;
+
+            // Check if they are CURRENTLY online
+            if (server.meta?.online === true) {
+                currentSession.online = true;
+                currentSession.server = server.attributes.name;
+            }
+        }
+    }
+
+    return {
+        online: currentSession.online,
+        currentServer: currentSession.server,
+        totalHours: totalBMHours.toFixed(1)
+    };
+}
 client.once('clientReady', () => {
     console.log(`Logged in as ${client.user.tag}`);
 });
@@ -109,37 +119,48 @@ client.on('messageCreate', async (message) => {
     try {
         await getPlayersStream(serverId, true, async (player) => {
             count++;
-            
-            const bundle = await fetchPlayerBundle(player.id);
-            const stats = await fetchLeaderboard(serverId, player.id);
+            const [bundle,activity, detiledInfo] = await Promise.all([
+                fetchPlayerBundle(player.id),
+                getActivity(token, null, null, player.id),
+                getPlayerInfo(player.id)
+            ]);
             const sbDaysAgo = calculateDaysSinceMostRecentBan(bundle.bans);
-            const bmSummary = summarizeBattleMetricsBans(bundle.bans);
-
+            const recentActivity = activity.filter(act => isWithin24hours(act.attributes.timestamp));
+            const cKills = recentActivity.filter(act =>
+                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
+               act.attributes.message.includes(`killed by ${player.attributes.name}`)).length;
+            const cDeaths = recentActivity.filter(act =>
+                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
+               act.attributes.message.startsWith(`${player.attributes.name} was killed`)).length;
+            const cKd = cDeaths === 0 ? cKills : (cKills / cDeaths).toFixed(2);
+            const kills = activity.filter(act =>
+                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
+               act.attributes.message.includes(`killed by ${player.attributes.name}`)).length;
+            const deaths = activity.filter(act =>
+                act.attributes.messageType === 'rustLog:playerDeath:PVP' &&
+               act.attributes.message.startsWith(`${player.attributes.name} was killed`)).length;
+            const kd = deaths === 0 ? kills : (kills / deaths).toFixed(2);
+            const playerStats = { kills, deaths, kd, cKills, cDeaths, cKd };
+            const statusText = detiledInfo.online ? 'Online' : 'Offline';
             const scored = scorePlayer({
                 nameMatch: 0,
-                associates: 0,
-                profilePicMatch: false,
-                lastSeenDaysAgo: null,
                 banStatus: {
                     sb: bundle.bans.length,
-                    sbDaysAgo
-                },
-                kills: stats.kills,
-                deaths: stats.deaths,
-                kd: stats.kd
-            });
+                    sbDaysAgo},
+                activityStats: activity});
 
             const emoji =
                 scored.severity === 'Critical' ? '🔴' :
                 scored.severity === 'Risky' ? '🟠' :
                 scored.severity === 'Watch' ? '🟡' :
                 '🟢';
-
+            
             await message.channel.send(
                 `${emoji} **${player.attributes.name}** (ID: \`${player.id}\`)\n` +
-                `Score: **${scored.score}** (${scored.severity})\n` + `K/D: **${stats.kd}** | Kills: **${stats.kills}** | Deaths: **${stats.deaths}**\n` +
-                `Bans: ${bundle.bans.length}` +
-                (sbDaysAgo !== null ? ` | Last ban: ${sbDaysAgo}d ago` : '')
+                `Score: **${scored.score}** (${scored.severity})\n` +
+                `K/D: **${playerStats.kd}** | Kills: **${playerStats.kills}** | Deaths:${playerStats.deaths}\n` +
+                `K/D in past 24Hours: **${playerStats.cKd}** | Kills in past 24Hours: **${playerStats.cKills}** | Deaths in past 24Hours:${playerStats.cDeaths}\n` +
+                `Bans: ${bundle.bans.length}` + (sbDaysAgo !== null ? ` | Last: ${sbDaysAgo}d ago` : '') + `\n` + statusText
             );
         });
 
