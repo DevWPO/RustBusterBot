@@ -10,7 +10,7 @@ const commands = [
     { name: 'bans', description: 'Get server bans by ID' },
     { name: 'players', description: 'Get server players by ID' }
 ];
-
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const token = process.env.TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildId = process.env.GUILD_ID;
@@ -65,10 +65,47 @@ async function fetchPlayerBundle(playerId) {
     return { bans: bans.data || [] };
 }
 
-async function getActivity(BMToken, Arkan= false, Guardian= false, playerID) {
-    const url = `https://api.battlemetrics.com/activity?tagTypeMode=and&filter[types][blacklist]=event:query&filter[players]=${playerID}&include=organization,user&page[size]=100`;
-    const responses = await bmFetch(url);
-    return responses.data || [];
+async function getActivity(BMToken, Arkan= false, Guardian= false, BMID) {
+    const url = `https://api.battlemetrics.com/activity?tagTypeMode=and&filter[types][blacklist]=event:query&filter[players]=${BMID}&include=organization,user&page[size]=1000`;
+    const data = await bmFetch(url);
+    
+    const activityLogs = data.data || [];
+
+    let stats = {
+        kills: 0, kills24h: 0,
+        deaths: 0, deaths24h: 0,
+        reports: 0, reports24h: 0
+    };
+
+    for (const activity of activityLogs) {
+        const type = activity.attributes.messageType;
+        const eventData = activity.attributes.data;
+        const isRecent = isWithin24hours(activity.attributes.timestamp);
+
+        // 1. Handle PVP Kills/Deaths using ID matching
+        if (type === "rustLog:playerDeath:PVP") {
+            if (eventData.killer_id == BMID) {
+                stats.kills++;
+                if (isRecent) stats.kills24h++;
+            } else if (eventData.player_id == BMID) {
+                stats.deaths++;
+                if (isRecent) stats.deaths24h++;
+            }
+        } 
+        // 2. Handle Player Reports
+        else if (type === "rustLog:playerReport") {
+            if (eventData.forPlayerId == BMID) {
+                stats.reports++;
+                if (isRecent) stats.reports24h++;
+            }
+        }
+    }
+
+    // Calculate KDs
+    stats.kd = stats.deaths === 0 ? stats.kills : (stats.kills / stats.deaths).toFixed(2);
+    stats.kd24h = stats.deaths24h === 0 ? stats.kills24h : (stats.kills24h / stats.deaths24h).toFixed(2);
+
+    return stats;
 }
 
 async function getPlayerInfo(playerId) {
@@ -118,12 +155,13 @@ client.on('messageCreate', async (message) => {
 
     try {
         await getPlayersStream(serverId, true, async (player) => {
+            const bundle = await fetchPlayerBundle(player.id);
+            await sleep(100); // To avoid rate limits
+            const activity = await getActivity(token, false, false, player.id);
+            await sleep(100);
+            const detiledInfo = await getPlayerInfo(player.id);
+            if (!detiledInfo || !detiledInfo.online) return;
             count++;
-            const [bundle,activity, detiledInfo] = await Promise.all([
-                fetchPlayerBundle(player.id),
-                getActivity(token, null, null, player.id),
-                getPlayerInfo(player.id)
-            ]);
             const sbDaysAgo = calculateDaysSinceMostRecentBan(bundle.bans);
             const recentActivity = activity.filter(act => isWithin24hours(act.attributes.timestamp));
             const cKills = recentActivity.filter(act =>
@@ -162,6 +200,7 @@ client.on('messageCreate', async (message) => {
                 `K/D in past 24Hours: **${playerStats.cKd}** | Kills in past 24Hours: **${playerStats.cKills}** | Deaths in past 24Hours:${playerStats.cDeaths}\n` +
                 `Bans: ${bundle.bans.length}` + (sbDaysAgo !== null ? ` | Last: ${sbDaysAgo}d ago` : '') + `\n` + statusText
             );
+            await sleep(500);
         });
 
         await loadingMsg.edit(`✅ Done. Streamed **${count} players**.`);
