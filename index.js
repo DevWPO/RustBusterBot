@@ -4,6 +4,8 @@ import { scorePlayer } from './modules/scoring.js';
 import { calculateDaysSinceMostRecentBan, summarizeBattleMetricsBans } from './modules/bmUtils.js';
 import { isWithin24hours } from "./modules/other/isWithin24hours.js";
 import dotenv from 'dotenv';
+import { EmbedBuilder } from 'discord.js';
+
 dotenv.config();
 const commands = [
     { name: 'test', description: 'Test' },
@@ -198,17 +200,58 @@ client.on('messageCreate', async (message) => {
                 scored.severity === 'Watch' ? '🟡' :
                 '🟢';
             
-            await message.channel.send(
-                `<@&1451751125538836583>`+
-                `${detailedInfo.online ? '🔵' : '⚪'} **${player.attributes.name}** (ID: \`${player.id}\`)\n` +
-                `Score: **${scored.score}** (${scored.severity}) | BM: **${detailedInfo.totalHours}h**\n` +
-                `**24h (C):** K/D: **${activityStats.kd24h}** | K: **${activityStats.kills24h}** | D: **${activityStats.deaths24h}** | Reports: **${activityStats.reports24h}**\n` +
-                `**Total (T):** K/D: **${activityStats.kd}** | K: **${activityStats.kills}** | D: **${activityStats.deaths}** | Reports: **${activityStats.reports}**\n` +
-                `Bans: **${bundle.bans.length}**` + (sbDaysAgo !== null ? ` | Last: ${sbDaysAgo}d ago` : '') + `\n` +
-                `Hacker Probability: **${hackerPercent}%**\n` +
-                `Current Server: **${detailedInfo.currentServer}**\n`+
-                `[BattleMetrics Profile](https://www.battlemetrics.com/rcon/players/${player.id})`
-            );
+
+            const embed = new EmbedBuilder()
+                .setColor(hackerPercent >= 70 ? '#e74c3c' : '#f1c40f') // red if high risk, yellow otherwise
+                .setTitle(`${detailedInfo.online ? '🔵' : '⚪'} ${player.attributes.name}`)
+                .setURL(`https://www.battlemetrics.com/rcon/players/${player.id}`)
+                .setDescription(
+                    `**ID:** \`${player.id}\`\n` +
+                    `**Score:** **${scored.score}** (${scored.severity})\n` +
+                    `**Hacker Probability:** **${hackerPercent}%**`
+                )
+                .addFields(
+                    {
+                        name: '24h Stats (C)',
+                        value:
+                            `K/D: **${activityStats.kd24h}**\n` +
+                            `Kills: **${activityStats.kills24h}**\n` +
+                            `Deaths: **${activityStats.deaths24h}**\n` +
+                            `Reports: **${activityStats.reports24h}**`,
+                        inline: true
+                    },
+                    {
+                        name: 'Total Stats (T)',
+                        value:
+                            `K/D: **${activityStats.kd}**\n` +
+                            `Kills: **${activityStats.kills}**\n` +
+                            `Deaths: **${activityStats.deaths}**\n` +
+                            `Reports: **${activityStats.reports}**`,
+                        inline: true
+                    },
+                    {
+                        name: 'BattleMetrics',
+                        value:
+                            `Playtime: **${detailedInfo.totalHours}h**\n` +
+                            `Bans: **${bundle.bans.length}**` +
+                            (sbDaysAgo !== null ? `\nLast Ban: **${sbDaysAgo}d ago**` : ''),
+                        inline: false
+                    },
+                    {
+                        name: 'Current Server',
+                        value: `**${detailedInfo.currentServer || 'Unknown'}**`,
+                        inline: false
+                    }
+                )
+                .setFooter({
+                    text: `Today at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                });
+
+            await message.channel.send({
+                content: `<@&1451751125538836583>`,
+                embeds: [embed]
+            });
+
             await sleep(500);
         });
 

@@ -8,12 +8,20 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "@discordjs/rest": "^2.6.0",
     "discord-api-types": "^0.38.37",
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.3",
     "node-fetch": "^2.7.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DevWPO/RustBusterBot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DevWPO/RustBusterBot/issues"
+  },
+  "homepage": "https://github.com/DevWPO/RustBusterBot#readme",
+  "description": ""
 }
