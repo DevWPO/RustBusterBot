@@ -14,7 +14,7 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const token = process.env.TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildId = process.env.GUILD_ID;
-
+const organId = process.env.BESTRUSTID;
 if (!token || !clientId || !guildId) {
     console.error('Missing required environment variables. Please set TOKEN, CLIENT_ID, and GUILD_ID.');
     process.exit(1);
@@ -29,6 +29,19 @@ const client = new Client({
 });
 
 
+function calculateHackerPercent(kd24, totalHours){
+    let kd24h = Number(kd24) || 0;
+    totalHours = Number(totalHours) || 0;
+
+    if (kd24h <= 0) return 0;
+
+    const kdFactor = Math.min(kd24h / 10, 1);
+    const hoursFactor = 1 - Math.min(totalHours / 1000, 1);
+    
+    const percent = (kdFactor * 0.65 + hoursFactor * 0.35) * 100;
+
+    return Math.round(percent);
+}
 async function bmFetch(url){
     const response = await rateLimitedFetch(url, {
         headers: {
@@ -161,6 +174,8 @@ client.on('messageCreate', async (message) => {
             await sleep(100);
             const detailedInfo = await getPlayerInfo(player.id);
             if (!detailedInfo || !detailedInfo.online) return;
+            const hackerPercent = calculateHackerPercent(activityStats.kd24h, detailedInfo.totalHours);
+            if (hackerPercent < 60) return;
             count++;
             const sbDaysAgo = calculateDaysSinceMostRecentBan(bundle.bans);
             const scored = scorePlayer({
@@ -175,11 +190,16 @@ client.on('messageCreate', async (message) => {
                 '🟢';
             
             await message.channel.send(
+                `<@&1451751125538836583>`+
                 `${detailedInfo.online ? '🔵' : '⚪'} **${player.attributes.name}** (ID: \`${player.id}\`)\n` +
                 `Score: **${scored.score}** (${scored.severity}) | BM: **${detailedInfo.totalHours}h**\n` +
                 `**24h (C):** K/D: **${activityStats.kd24h}** | K: **${activityStats.kills24h}** | D: **${activityStats.deaths24h}** | Reports: **${activityStats.reports24h}**\n` +
                 `**Total (T):** K/D: **${activityStats.kd}** | K: **${activityStats.kills}** | D: **${activityStats.deaths}** | Reports: **${activityStats.reports}**\n` +
-                `Bans: **${bundle.bans.length}**` + (sbDaysAgo !== null ? ` | Last: ${sbDaysAgo}d ago` : ''));
+                `Bans: **${bundle.bans.length}**` + (sbDaysAgo !== null ? ` | Last: ${sbDaysAgo}d ago` : '') + `\n` +
+                `Hacker Probability: **${hackerPercent}%**\n` +
+                `Current Server: **${detailedInfo.currentServer}**\n`+
+                `[BattleMetrics Profile](https://www.battlemetrics.com/rcon/players/${player.id})`
+            );
             await sleep(500);
         });
 
