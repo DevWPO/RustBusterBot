@@ -1,13 +1,13 @@
 import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { bmFetch } from './modules/bmFetch.js';
 import { calculateDaysSinceMostRecentBan} from './modules/bmUtils.js';
-import dotenv from 'dotenv';
+// import dotenv from 'dotenv';
 import { EmbedBuilder } from 'discord.js';
 import { getActivity } from './modules/GetActivity.js';
 import { calculateHackerPercent } from './modules/other/calculateHackerPercent.js';
 import { getPlayerInfo } from './modules/getPlayerInfo.js';
 import { getOrgServer } from './modules/getOrgServer.js';
-dotenv.config();
+// dotenv.config();
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const token = process.env.TOKEN;
