@@ -51,7 +51,7 @@ async function fetchPlayerBundle(playerId) {
     return { bans: bans.data || [] };
 }
 
-client.once('clientReady', () => {
+client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}`);
 });
 
@@ -59,69 +59,51 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
     const args = message.content.trim().split(/\s+/);
-    if (args[0] !== '!players' || !args[1]) return;
-
-    const serverId = args[1];
+    if (args[0] !== '!start') return;
     const loadingMsg = await message.channel.send('🔄 Streaming players…');
 
     let count = 0;
     const servers = await getOrgServer(organId, BMToken);
     const onlineServers = servers.filter(
     s => s.attributes.status === 'online');
-
-    console.log(servers.length);
-    console.log(onlineServers.length);
-    onlineServers.forEach(server => {
-    console.log(server.attributes.name);
-});
-    
-    
     try {
-        await getPlayersStream(serverId, true, async (player) => {
+    // Loop through every online server
+    for (const server of onlineServers) {
+        await getPlayersStream(server.id, true, async (player) => {
             const bundle = await fetchPlayerBundle(player.id);
-            await sleep(100); // To avoid rate limits
             const activityStats = await getActivity(BMToken, false, false, player.id);
-            await sleep(100);
-            const detailedInfo = await getPlayerInfo(player.id,BMToken);
+            const detailedInfo = await getPlayerInfo(player.id, BMToken);
             if (!detailedInfo || !detailedInfo.online) return;
-            const hackerPercent = calculateHackerPercent(activityStats.kd24h, detailedInfo.totalHours);
             
+            const hackerPercent = calculateHackerPercent(activityStats.kd24h, detailedInfo.totalHours);
+            if (hackerPercent < 60) return;
+            // Only show if the current server is online
             if (!onlineServers.some(CServer => CServer.attributes.name === detailedInfo.currentServer)) return;
             count++;
+
             const sbDaysAgo = calculateDaysSinceMostRecentBan(bundle.bans);
 
             const embed = new EmbedBuilder()
-                .setColor(hackerPercent >= 70 ? '#e74c3c' : '#f1c40f') // red if high risk, yellow otherwise
+                .setColor(hackerPercent >= 70 ? '#e74c3c' : '#f1c40f')
                 .setTitle(`${detailedInfo.online ? '🔵' : '⚪'} ${player.attributes.name}`)
                 .setURL(`https://www.battlemetrics.com/rcon/players/${player.id}`)
                 .setDescription(
-                    `**ID:** \`${player.id}\`\n` +
-                    `**Hacker Probability:** **${hackerPercent}%**`
+                    `**ID:** \`${player.id}\`\n**Hacker Probability:** **${hackerPercent}%**`
                 )
                 .addFields(
                     {
                         name: '24h Stats (C)',
-                        value:
-                            `K/D: **${activityStats.kd24h}**\n` +
-                            `Kills: **${activityStats.kills24h}**\n` +
-                            `Deaths: **${activityStats.deaths24h}**\n` +
-                            `Reports: **${activityStats.reports24h}**`,
+                        value: `K/D: **${activityStats.kd24h}**\nKills: **${activityStats.kills24h}**\nDeaths: **${activityStats.deaths24h}**\nReports: **${activityStats.reports24h}**`,
                         inline: true
                     },
                     {
                         name: 'Total Stats (T)',
-                        value:
-                            `K/D: **${activityStats.kd}**\n` +
-                            `Kills: **${activityStats.kills}**\n` +
-                            `Deaths: **${activityStats.deaths}**\n` +
-                            `Reports: **${activityStats.reports}**`,
+                        value: `K/D: **${activityStats.kd}**\nKills: **${activityStats.kills}**\nDeaths: **${activityStats.deaths}**\nReports: **${activityStats.reports}**`,
                         inline: true
                     },
                     {
                         name: 'BattleMetrics',
-                        value:
-                            `Playtime: **${detailedInfo.totalHours}h**\n` +
-                            `Bans: **${bundle.bans.length}**` +
+                        value: `Playtime: **${detailedInfo.totalHours}h**\nBans: **${bundle.bans.length}**` +
                             (sbDaysAgo !== null ? `\nLast Ban: **${sbDaysAgo}d ago**` : ''),
                         inline: false
                     },
@@ -134,20 +116,26 @@ client.on('messageCreate', async (message) => {
                 .setFooter({
                     text: `Today at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                 });
-
-            await message.channel.send({
+            if(hackerPercent >= 80) {
+                await message.channel.send({
                 content: `<@&1451751125538836583>`,
                 embeds: [embed]
-            });
+            });}else{
+                await message.channel.send({
+                embeds: [embed]});}
 
-            await sleep(500);
+
+            await sleep(350); // slow down to avoid rate limits
         });
-
-        await loadingMsg.edit(`✅ Done. Streamed **${count} players**.`);
-    } catch (err) {
-        console.error(err);
-        await loadingMsg.edit('❌ Error while streaming players.');
     }
+
+    await loadingMsg.edit(`✅ Done. Streamed **${count} players**.`);
+} catch (err) {
+    console.error(err);
+    await loadingMsg.edit('❌ Error while streaming players.');
+}
+
+
 });
 
 
