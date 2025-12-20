@@ -147,7 +147,8 @@ const recordRateLimitHeaders = headers => {
     }
 };
 
-module.exports = {
+
+export {
     rateLimitedFetch,
     withBattleMetricsRateLimit,
     recordRateLimitHeaders,
