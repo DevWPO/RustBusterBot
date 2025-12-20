@@ -28,7 +28,16 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
 });
 
-
+async function getOrgServer(orgId){
+    let url = `https://api.battlemetrics.com/servers?filter[organizations]=${orgId}&filter[game]=rust&page[size]=100`;
+    const servers = [];
+    while (url){
+        const data = await bmFetch(url);
+        servers.push(...(data.data) || []);
+        url = data.links?.next || null;
+    }
+    return servers.map(server => server.id);
+}
 function calculateHackerPercent(kd24, totalHours){
     let kd24h = Number(kd24) || 0;
     totalHours = Number(totalHours) || 0;
