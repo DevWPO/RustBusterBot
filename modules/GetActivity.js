@@ -1,5 +1,5 @@
 import { bmFetch } from "./bmFetch.js";
-import { isWithin24hours } from "./other/isWithin24hours.js";
+import { isWithin24hours } from "./other/IsWithin24hours.js";
 export async function getActivity(BMToken, Arkan= false, Guardian= false, BMID) {
     const url = `https://api.battlemetrics.com/activity?tagTypeMode=and&filter[types][blacklist]=event:query&filter[players]=${BMID}&include=organization,user&page[size]=1000`;
     const data = await bmFetch(url,BMToken);
