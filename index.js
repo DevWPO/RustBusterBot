@@ -1,4 +1,5 @@
 // Please work Please
+// Work in Progress
 import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { bmFetch } from './modules/bmFetch.js';
 import { calculateDaysSinceMostRecentBan} from './modules/bmUtils.js';
