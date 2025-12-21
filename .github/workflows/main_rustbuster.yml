@@ -27,6 +27,7 @@ jobs:
         run: |
           npm install
           npm run build --if-present
+          npm run test --if-present
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -50,9 +51,9 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_A8EB74E1BEAC426593D9228E53C525EC }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_0653800101284A70B951F14CADD970B6 }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_D027919F5B4D4DB9BBB9DD653676992E }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_A95C821EFC3D447387D10AEF8C902F2A }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_CD5EE24D692740F4A631D2A1FCB10288 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_31CAD47FBD134151AE4861F4C031C9C5 }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
@@ -61,5 +62,4 @@ jobs:
           app-name: 'RustBuster'
           slot-name: 'Production'
           package: .
-
           
