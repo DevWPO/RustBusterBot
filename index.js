@@ -1,3 +1,4 @@
+// Please work Please
 import { Client, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { bmFetch } from './modules/bmFetch.js';
 import { calculateDaysSinceMostRecentBan} from './modules/bmUtils.js';
