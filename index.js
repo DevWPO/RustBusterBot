@@ -76,7 +76,7 @@ client.on('messageCreate', async (message) => {
             if (!detailedInfo || !detailedInfo.online) return;
             
             const hackerPercent = calculateHackerPercent(activityStats.kd24h, detailedInfo.totalHours);
-
+            if (hackerPercent < 60) return;
             // Only show if the current server is online
             if (!onlineServers.some(CServer => CServer.attributes.name === detailedInfo.currentServer)) return;
             count++;
