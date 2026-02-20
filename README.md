@@ -6,6 +6,11 @@ This project combines **API integration, real-time data processing, and detectio
 
 ---
 
+##  Links
+- [Othmen's GitHub](https://github.com/othmen27)
+- [Othmen's Portfolio](https://othmen27.github.io/othmenmhiri/)
+- [Anas's GitHub](https://github.com/DevAnasWPO)
+---
 ##  Features
 
 -  Streams players from multiple servers in real-time
